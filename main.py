@@ -115,7 +115,7 @@ def save_detection():
         
         # ✅ Dapatkan summary_id yang baru saja di-insert
         summary_id = cursor.lastrowid
-        print(f"✅ Created detection_summary with ID: {summary_id}")
+        print(f"✅ Created detection_summary with ID: {summary_id}, confidence: {max_confidence}")
         
         # 🔥 STEP 2: Simpan detail deteksi dengan summary_id
         for idx, det in enumerate(detections):
@@ -177,7 +177,7 @@ def save_detection():
 @app.route('/data', methods=['GET'])
 def get_data():
     """
-    ✅ FIXED: Mengembalikan SEMUA nama hama dalam satu deteksi
+    ✅ FIXED: Mengembalikan SEMUA nama hama dalam satu deteksi dengan confidence yang benar
     """
     global sent_image_ids
     
@@ -198,6 +198,7 @@ def get_data():
             status = {'system_active': True, 'total_detections': 0}
         
         # ✅ AMBIL DETECTION_SUMMARY TERLEBIH DAHULU (DENGAN pest_details)
+        # 🔥 FIX: Cast max_confidence sebagai DECIMAL untuk memastikan nilainya terbaca
         if sent_image_ids:
             placeholders = ','.join(['%s'] * len(sent_image_ids))
             query = f"""
@@ -205,7 +206,7 @@ def get_data():
                     id,
                     detection_time,
                     image_base64,
-                    max_confidence,
+                    CAST(max_confidence AS DECIMAL(10,2)) as max_confidence,
                     total_pests_found,
                     pest_details
                 FROM detection_summary
@@ -220,7 +221,7 @@ def get_data():
                     id,
                     detection_time,
                     image_base64,
-                    max_confidence,
+                    CAST(max_confidence AS DECIMAL(10,2)) as max_confidence,
                     total_pests_found,
                     pest_details
                 FROM detection_summary
@@ -280,16 +281,26 @@ def get_data():
         
         # ✅ Kirim gambar HANYA jika ada deteksi baru
         if latest and latest['id'] not in sent_image_ids:
+            # 🔥 FIX: Ambil confidence dengan fallback yang lebih baik
+            confidence_value = latest.get('max_confidence')
+            if confidence_value is not None:
+                try:
+                    confidence = int(float(confidence_value) * 100)  # Convert 0.95 -> 95
+                except (ValueError, TypeError):
+                    confidence = 85
+            else:
+                confidence = 85
+            
             response['newDetection'] = True
             response['motion'] = True
             response['image'] = latest['image_base64']
             response['id'] = latest['id']
-            response['confidence'] = int(float(latest['max_confidence'])) if latest['max_confidence'] else 85
+            response['confidence'] = confidence
             response['pestNames'] = pest_names
             response['pestName'] = ', '.join(pest_names) if pest_names else 'Unknown Pest'
             
             sent_image_ids.add(latest['id'])
-            print(f"📷 Sending NEW image: ID={latest['id']}, Pests={pest_names} (Total sent: {len(sent_image_ids)})")
+            print(f"📷 Sending NEW image: ID={latest['id']}, Confidence={confidence}%, Pests={pest_names} (Total sent: {len(sent_image_ids)})")
             
             # Batasi tracking maksimal 100 ID
             if len(sent_image_ids) > 100:
@@ -328,7 +339,7 @@ def get_history():
                 id,
                 detection_time as timestamp,
                 image_base64 as image,
-                max_confidence as confidence,
+                CAST(max_confidence AS DECIMAL(10,2)) as confidence,
                 total_pests_found,
                 pest_details
             FROM detection_summary
@@ -359,8 +370,17 @@ def get_history():
                 except:
                     pest_names = ['Unknown Pest']
             
+            # 🔥 FIX: Convert confidence dari decimal ke integer percentage
+            conf_value = item.get('confidence')
+            if conf_value is not None:
+                try:
+                    item['confidence'] = int(float(conf_value) * 100)
+                except (ValueError, TypeError):
+                    item['confidence'] = 85
+            else:
+                item['confidence'] = 85
+            
             item['timestamp'] = item['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
-            item['confidence'] = int(float(item['confidence'])) if item['confidence'] else 85
             item['motionDetected'] = True
             item['pestNames'] = pest_names
             item['pestName'] = ', '.join(pest_names) if pest_names else 'Unknown Pest'
@@ -620,4 +640,5 @@ if __name__ == '__main__':
     print("   • pestName = string 'Belatung Pucuk, Wereng Coklat'")
     print("   • Query menggunakan summary_id sebagai foreign key")
     print("   • Delete detection dengan cascade (summary + details)")
+    print("   • 🔥 FIX: Confidence sekarang menampilkan persentase dengan benar")
     app.run(host='0.0.0.0', port=5000, debug=True)
