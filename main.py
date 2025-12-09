@@ -10,10 +10,11 @@ CORS(app)
 
 # ===== KONFIGURASI DATABASE =====
 DB_CONFIG = {
-    'host': 'localhost',
+    'host': 'mysql.railway.internal',
     'user': 'root',
-    'password': '',
-    'database': 'pest_detection'
+    'password': 'JtelxPAHYJXuNNPLUegpiQZEtbfVCgJA',
+    'database': 'railway',
+    'port': 3306
 }
 
 # ✅ Track gambar yang sudah dikirim berdasarkan ID
@@ -41,7 +42,7 @@ def ensure_summary_id_column():
         cursor.execute("""
             SELECT COUNT(*) as count
             FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = 'pest_detection' 
+            WHERE TABLE_SCHEMA = 'railway' 
             AND TABLE_NAME = 'detections' 
             AND COLUMN_NAME = 'summary_id'
         """)
